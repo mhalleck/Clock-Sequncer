@@ -256,7 +256,7 @@ void loop()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
-//first routine
+//function == 1
 void BPMAdjust()
 {
 
@@ -304,6 +304,7 @@ void BPMAdjust()
   {
         function++;
         function = function % 4;
+        needUpdate = true;
   }
 
   
@@ -312,7 +313,7 @@ void BPMAdjust()
 
 
   //screen refresh section
-      if (millis() - lastRefresh > 50 && needUpdate){
+      if (millis() - lastRefresh > 50 && needUpdate && function == 1){
           //Refresh Display
           lastRefresh = millis();
           needUpdate = false;
@@ -344,7 +345,7 @@ void BPMAdjust()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
-//Second routine
+//function == 2
 void divisionSelect()
 {
     //for the purposes of this code, needUpdate will be used for updating which sequence is displayed
@@ -461,6 +462,7 @@ void divisionSelect()
     //for thhis loop the function key will back us out of changing the division/sequence
     if (pressed_butt4)
     {
+        
         if (changeDivision)
         {
           needUpdate = true;
@@ -476,6 +478,7 @@ void divisionSelect()
           function++;
           function = function % 4;
           displaySeq = sequence;
+          needUpdate = true;
         }
     }
 
@@ -484,7 +487,7 @@ void divisionSelect()
 
 
   //screen refresh section
-      if (needUpdate || change){
+      if (function == 2 && (needUpdate || change)){
           
           //Refresh Display
 
@@ -601,7 +604,7 @@ void divisionSelect()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
-//Third Routine
+//function == 3
 void sleepMode()
 {
       
@@ -647,6 +650,7 @@ void sleepMode()
       {
           function++;
           function = function % 4;
+          needUpdate = true;
          if (sleepConfirm)
          {
           sleepConfirm = false;
@@ -661,16 +665,20 @@ void sleepMode()
           lcd.init();       
           // Print a message to the LCD.
           lcd.backlight();
+          TCCR1B |= B00000011;  // turns clock on with prescale value of 64
+          needclear = true;
+          needUpdate = true;
       }
 
       if (sleepConfirm)
       {
           lcd.noBacklight();
           lcd.noDisplay();
+          TCCR1B = 0;           // clears any prescale value, and sets clock to off
       }
   
   //screen refresh section
-      if (millis() - lastRefresh > 50 && needUpdate){
+      if (millis() - lastRefresh > 50 && needUpdate && function == 3){
           //Refresh Display
           lastRefresh = millis();
           needUpdate = false;
@@ -705,7 +713,7 @@ void sleepMode()
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
-//Fourth Routine
+//function == 0
 void sequencer()
 {
   
@@ -749,11 +757,12 @@ void sequencer()
       {
         function++;
         function = function % 4;
+        needUpdate = true;
       }
 
       
       //refreshes the screen, changes based on button pressed
-      if (millis() - lastRefresh > 50 && needUpdate){
+      if (millis() - lastRefresh > 50 && needUpdate && function == 0){
           //Refresh Display
           lastRefresh = millis();
 
