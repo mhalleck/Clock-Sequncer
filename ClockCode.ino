@@ -22,14 +22,15 @@ int function = 0;
 
 bool coarse = false;
 
-float BPM = 120.0;
+int BPM = 120;
 //holds how many milliseconds = beat
-float beatDelay = 1.0;
+unsigned long beatDelay = 1;
 int totalBeats = 16;
 unsigned long cTime;
 unsigned long lastBeat = 0;
-long counter = -1;
-bool beat = false;
+long counter = -1; //not used anymore?
+
+bool beat = false; //not used anymore?
 bool sleep = false;
 bool sleepConfirm = false;
 bool wasSleep = false;
@@ -139,7 +140,18 @@ void setup()
   lcd.print("________________");
   lcd.setCursor(0,1);
   lcd.print("                ");
-  lastBeat = micros();
+
+  //initial setup for interrupt
+  //calculate initial beat delay, this is in clock ticks / 64, so multiply by 64 for the actual number of clock ticks, 250 is the ticks *  64 that equals 1 ms
+  //first figure out how many miliseconds per 16/th
+  beatDelay = 250.0 * 1000.0 * 60.0 / BPM / totalBeats;
+  Serial.println(beatDelay);
+  
+  TCCR1A = 0;           // Init Timer1A
+  TCCR1B = 0;           // clears any prescale value, and sets clock to off
+  TCCR1B |= B00000011;  // turns clock on with prescale value of 64
+  OCR1A = beatDelay;        // sets initial tick delay value for COMPA interrupt
+  TIMSK1 |= B00000010;  // Enable Timer COMPA Interrupt
 }
 
 
@@ -149,38 +161,6 @@ void loop()
  
   //T0
   cTime = micros();
-
-  //this gives the number of milliseconds we need for each sub-beat (1/16th of a beat)
-  //if that much time has passed then we know it's time to run the beat again
-
-  
-  //now calculate microseconds
-  beatDelay = 1000.0 * 1000.0 * 60.0 / BPM / totalBeats;
-
-  //we are running the LED for about half the total beat time
-  lastLEDTimeout = beatDelay * 4;
-
-  //counts beats, pulses, each beat is 1/16th time of bpm
-  //this is a global advance that will not reset, depending on our mode will change how this triggers
-  if ((cTime - lastBeat) >= beatDelay)
-  {
-      //Serial.println(millis());
-      //this prints how many milliseconds ahead this beat is
-      Serial.print("P: ");
-      Serial.println((((cTime - lastBeat)) - beatDelay));
-      beat = true;
-      lastBeat = lastBeat + beatDelay;
-      //lastBeat = cTime;
-      counter++;
-
-      //this controls blinking of LEDs and such, allows us to move the lengthy LED code elsewhere
-      clockPulse();
-      
-  }
-  else
-  {
-    beat = false;
-  }
    
         
    //if (pressed)
@@ -189,7 +169,7 @@ void loop()
 
    
    //button checks
-   if (millis() - lastTimeButtonStateChanged > debounceDuration && !beat) 
+   if (millis() - lastTimeButtonStateChanged > debounceDuration) 
    {
        lastTimeButtonStateChanged = millis();
           
@@ -291,6 +271,10 @@ void BPMAdjust()
       else
         BPM++;
     }
+      
+    //calculates clock delay in clock ticks, 250 ticks = 1 ms
+    beatDelay = 250.0 * 1000.0 * 60.0 / BPM / totalBeats;
+    //the beatDelay is what the interrupt is adding to the compare counter, so it will always be updated properly loooool
   }
   else if (pressed_butt2) //decrease (left)
   {
@@ -303,6 +287,9 @@ void BPMAdjust()
       else
         BPM--;
     }
+
+    //calculates clock delay in clock ticks, 250 ticks = 1 ms
+    beatDelay = 250.0 * 1000.0 * 60.0 / BPM / totalBeats;
   }
   else if (pressed_butt3) //select button, changes from coarse to fine
   {
@@ -318,12 +305,14 @@ void BPMAdjust()
         function++;
         function = function % 4;
   }
+
+  
   
 
 
 
   //screen refresh section
-      if (millis() - lastRefresh > 50 && needUpdate && beat){
+      if (millis() - lastRefresh > 50 && needUpdate){
           //Refresh Display
           lastRefresh = millis();
           needUpdate = false;
@@ -495,7 +484,7 @@ void divisionSelect()
 
 
   //screen refresh section
-      if ((needUpdate || change) && beat){
+      if (needUpdate || change){
           
           //Refresh Display
 
@@ -560,63 +549,6 @@ void divisionSelect()
                 bottomLine = bottomLine + " ";
 
 
-              
-              /*
-              
-            switch (displaySeq)
-            {
-              
-              case 0:
-                topLine =    "2, 4, 8, 16, 32,";
-                bottomLine = "64, 128         ";
-              break;
-              case 1:
-                topLine =    "3, 5, 7, 9, 11, ";
-                bottomLine = "13, 15          ";
-              break;
-              case 2:
-                topLine =    "2, 3, 4, 5, 6,  ";
-                bottomLine = "7, 8            ";
-              break;
-              case 3:
-                topLine =    "3, 5, 8, 13, 21,";
-                bottomLine = "34, 55          ";
-              break;
-              case 4:
-                topLine =    "2, 3, 5, 7, 11, ";
-                bottomLine = "13, 17          ";
-              break;
-              case 5:
-                topLine =    "3, 6, 10, 15,   ";
-                bottomLine = "21, 28, 36      ";
-              break;
-              case 6:
-                topLine =    "4, 9, 16, 25,   ";
-                bottomLine = "36, 49, 64      ";
-              break;
-              case 7:
-                topLine =    "4, 10, 20, 35,  ";
-                bottomLine = "56, 84, 120     ";
-              break;
-              case 8:
-                topLine =    "5, 14, 30, 55,  ";
-                bottomLine = "91, 140, 204    ";
-              break;
-              case 9:
-                topLine =    "8, 27, 64, 125, ";
-                bottomLine = "216, 343, 512,  ";
-              break;
-              case 10:
-                topLine =    "32|243|1024|3125";
-                bottomLine = "7776|16807|3276 ";
-              break;
-              case 11:
-                topLine =    "13, 37, 73, 121,";
-                bottomLine = "181, 253, 337   ";
-              break;
-            }
-
-            */
     
               if (sequence == displaySeq)
               {
@@ -821,7 +753,7 @@ void sequencer()
 
       
       //refreshes the screen, changes based on button pressed
-      if (millis() - lastRefresh > 50 && needUpdate && beat){
+      if (millis() - lastRefresh > 50 && needUpdate){
           //Refresh Display
           lastRefresh = millis();
 
@@ -858,6 +790,15 @@ void sequencer()
   
 }
 
+
+ISR(TIMER1_COMPA_vect)
+{
+  OCR1A += beatDelay; // Advance The COMPA Register
+  // Handle The Timer Interrupt
+  //...
+  counter++;
+  clockPulse();
+}
 
 void clockPulse()
 {
