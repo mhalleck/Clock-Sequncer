@@ -670,7 +670,7 @@ void sleepMode()
       }
   
   //screen refresh section
-      if (millis() - lastRefresh > 50 && needUpdate && beat){
+      if (millis() - lastRefresh > 50 && needUpdate){
           //Refresh Display
           lastRefresh = millis();
           needUpdate = false;
