@@ -35,8 +35,30 @@ bool sleepConfirm = false;
 bool wasSleep = false;
 bool needUpdate = true;
 
-bool clockState1 = HIGH; 
-bool clockState2 = HIGH; 
+bool clockState1 = LOW; 
+bool clockState2 = LOW; 
+bool clockState3 = LOW;
+bool clockState4 = LOW;
+bool clockState5 = LOW;
+bool clockState6 = LOW;
+bool clockState7 = LOW;
+bool clockState8 = LOW;
+
+
+int led1 = 8; //this pulses every tick
+int led2 = 11; //this pulses every full beat'
+int led3 = 4;
+int led4 = 10;
+int led5 = 3;
+int led6 = 17;
+int led7 = 2;
+int led8 = 12;
+
+String nextNum = "";
+int nextNumLength = 0;
+bool changeSequence = false;
+bool changeDivision = false;
+int microSequence = 0;
 
 
 bool change = false;
@@ -60,13 +82,13 @@ bool LED = true;
 
 int beats[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
-const static int sequences[24][7] = {
+int sequence = 0;
+int displaySeq = 0;
+bool seqChange = false;
+int sequences[12][7] = {
   {2, 4, 8, 16, 32, 64, 128},          {3, 5, 7, 9, 11, 13, 15},        {2, 3, 4, 5, 6, 7, 8},                     {3, 5, 8, 13, 21, 34, 55},
   {2, 3, 5, 7, 11, 13, 17},            {3, 6, 10, 15, 21, 28, 36},      {4, 9, 16, 25, 36, 49, 64},                {4, 10, 20, 35, 56, 84, 120},
-  {5, 14, 30, 55, 91, 140, 204},       {8, 27, 64, 125, 216, 343, 512}, {32, 243, 1024, 3125, 7776, 16807, 32768}, {13, 37, 73, 121, 181, 253, 337},
-  {14, 51, 124, 245, 426, 679, 1016},  {2, 4, 8, 12, 24, 48, 72},       {16, 22, 34, 36, 46, 56, 64},              {72, 108, 200, 288, 392, 432, 500},
-  {6, 21, 28, 301, 325, 496, 697},     {2, 8, 20, 28, 50, 82, 126},     {21, 33, 57, 69, 77, 93, 129},             {2, 3, 2, 5, 6, 7, 2},
-  {30, 42, 66, 70, 78, 102, 105},      {9, 45, 55, 99, 297, 703, 999},  {70, 836, 4030, 5830, 7192, 7912, 9272},   {15, 34, 65, 111, 175, 260, 369},
+  {5, 14, 30, 55, 91, 140, 204},       {8, 27, 64, 125, 216, 343, 512}, {32, 243, 1024, 3125, 7776, 16807, 32768}, {13, 37, 73, 121, 181, 253, 337}
 };
 
 
@@ -86,8 +108,25 @@ void setup()
   pinMode(button2, INPUT_PULLUP);
   pinMode(button3, INPUT_PULLUP);
   pinMode(button4, INPUT_PULLUP);
-  pinMode(10, OUTPUT);
-  pinMode(4, OUTPUT);
+
+  //declares our LED pins as being for output
+  pinMode(led1, OUTPUT);
+  pinMode(led2, OUTPUT);
+  pinMode(led3, OUTPUT);
+  pinMode(led4, OUTPUT);
+  pinMode(led5, OUTPUT);
+  pinMode(led6, OUTPUT);
+  pinMode(led7, OUTPUT);
+  pinMode(led8, OUTPUT);
+  
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
+  digitalWrite(led3, LOW);
+  digitalWrite(led4, LOW);
+  digitalWrite(led5, LOW);
+  digitalWrite(led6, LOW);
+  digitalWrite(led7, LOW);
+  digitalWrite(led8, LOW);
 
   
   
@@ -134,20 +173,8 @@ void loop()
       //lastBeat = cTime;
       counter++;
 
-
-      clockState1 = !clockState1;
-      digitalWrite(4, clockState1);
-
-      
-      //controls beat light
-      if (counter % 8 == 0)
-      {
-        
-        //digitalWrite(4, HIGH);
-        //LED = true;
-        clockState2 = !clockState2;
-        digitalWrite(10, clockState2);
-      }
+      //this controls blinking of LEDs and such, allows us to move the lengthy LED code elsewhere
+      clockPulse();
       
   }
   else
@@ -162,7 +189,7 @@ void loop()
 
    
    //button checks
-   if (millis() - lastTimeButtonStateChanged > debounceDuration) 
+   if (millis() - lastTimeButtonStateChanged > debounceDuration && !beat) 
    {
        lastTimeButtonStateChanged = millis();
           
@@ -256,18 +283,26 @@ void BPMAdjust()
   if (pressed_butt1) //increase (right)
   {
     needUpdate = true;
-    if (coarse)
-      BPM += 5;
-    else
-      BPM++;
+    //needs to cap BPM otherwise it tries to beat so fast that no other code ever executes
+    if (BPM <= 300)
+    {
+      if (coarse)
+        BPM += 5;
+      else
+        BPM++;
+    }
   }
   else if (pressed_butt2) //decrease (left)
   {
     needUpdate = true;
-    if (coarse)
-      BPM -= 5;
-    else
-      BPM--;
+
+    if (BPM > 15)
+    {
+      if (coarse)
+        BPM -= 5;
+      else
+        BPM--;
+    }
   }
   else if (pressed_butt3) //select button, changes from coarse to fine
   {
@@ -323,45 +358,313 @@ void BPMAdjust()
 //Second routine
 void divisionSelect()
 {
-    if (pressed_butt1)
+    //for the purposes of this code, needUpdate will be used for updating which sequence is displayed
+    //change division goes true when we hit enter on a division number so we can increase or decrease it
+    //microSequence controls which of the divisions we've selected to change, we only have 7 so it wraps at 7
+    
+    if (pressed_butt1) //right
     {
       
+      if (changeDivision)
+      {
+        if (coarse)
+          sequences[displaySeq][microSequence] += 5;
+        else
+          sequences[displaySeq][microSequence]++;
+      }
+      else if (changeSequence)
+      {
+        microSequence++;
+        microSequence = microSequence % 7;
+      }
+      else
+      {
+        displaySeq++;
+      }
+      
+      needUpdate = true;
     }
-    else if (pressed_butt2)
+    else if (pressed_butt2) // left
     {
-      
+      if (changeDivision)
+      {
+        if (coarse)
+        {
+            if (sequences[displaySeq][microSequence] > 6)
+              sequences[displaySeq][microSequence] -= 5;
+            else
+              sequences[displaySeq][microSequence] = 1;
+        }
+        else
+        {
+          if (sequences[displaySeq][microSequence] > 1)
+            sequences[displaySeq][microSequence]--;
+        }
+      }
+      else if (changeSequence)
+      {
+        if (microSequence == 0)
+          microSequence = 7;
+        microSequence--;
+      }
+      else
+      {
+        if (displaySeq == 0)
+          displaySeq = 12;
+        displaySeq--;
+      }
+      needUpdate = true;
     }
-    else if (pressed_butt3)
-    {
+    else if (pressed_butt3) // select
+    { 
+      change = true;
+      needUpdate = true;
       
+      //tells our code that we need to reset the LEDs all to high, minus the beat drive
+      //seqChange = true;
+
+      //we only want to do this when we move between sequences, if this isn't the case that means we're currently on the sequence we want to change the divisions of
+      if (sequence != displaySeq)
+      {
+        sequence = displaySeq;
+
+        //tells the screen to fill in the dot
+        change = true;
+  
+        //this resets the counter, sets all LEDs to off, and sets the clockstates back to low
+        counter = -1;
+        digitalWrite(led1, LOW);
+        digitalWrite(led2, LOW);
+        digitalWrite(led3, LOW);
+        digitalWrite(led4, LOW);
+        digitalWrite(led5, LOW);
+        digitalWrite(led6, LOW);
+        digitalWrite(led7, LOW);
+        digitalWrite(led8, LOW);
+        
+        clockState1 = LOW;
+        clockState2 = LOW;
+        clockState3 = LOW;
+        clockState4 = LOW;
+        clockState5 = LOW;
+        clockState6 = LOW;
+        clockState7 = LOW;
+        clockState8 = LOW;
+      }
+      else if (changeDivision) //if changeDivision is true that means we want to change the value, if we hit enter that means we are done changing the value
+      {
+        //flips the value of coarse
+        coarse = !coarse;
+        
+      }
+      else if (changeSequence)
+      {
+        changeDivision = true;
+      }
+      else //if we hit here, that means change division and change sequence are both false, which means we have selected the sequence we want to change, it is the currently running sequence
+      {
+        changeSequence = true;
+      }
+
     }
 
     
-
+    //for thhis loop the function key will back us out of changing the division/sequence
     if (pressed_butt4)
     {
-        function++;
-        function = function % 4;
+        if (changeDivision)
+        {
+          needUpdate = true;
+          changeDivision = false;
+        }
+        else if (changeSequence)
+        {
+          needUpdate = true;
+          changeSequence = false;
+        }
+        else
+        {
+          function++;
+          function = function % 4;
+          displaySeq = sequence;
+        }
     }
+
+    //wraps around displaySeq value when it reaches 24
+    displaySeq = displaySeq % 12;
 
 
   //screen refresh section
-      if (millis() - lastRefresh > 50 && needUpdate && beat){
+      if ((needUpdate || change) && beat){
           
-          needUpdate = false;
           //Refresh Display
-          
-          lastRefresh = millis();
-          lcd.setCursor(0,0);
-          lcd.print("________________");
-          lcd.setCursor(0,1);
+
+          if (needUpdate)
+          {
+
+              //depending on whether we are in a division change or a sequence value change
+              //when we add the number to redraw the screen we want to do something to it
+              topLine = "";
+              bottomLine = "";
+
+              //outline for procedurally building topline and bottom line from numbers in sequence
+              for (int i = 0; i < 7; i++) 
+              {
+                
+                if (changeDivision)
+                {
+                  if (i == microSequence)
+                    nextNum = ">" + String(sequences[displaySeq][i]) + "<";
+                  else
+                    nextNum = String(sequences[displaySeq][i]);
+                    
+                }
+                else if (changeSequence)
+                {
+                  if (i == microSequence)
+                    nextNum = "_" + String(sequences[displaySeq][i]) + "_";
+                  else
+                    nextNum = String(sequences[displaySeq][i]);
+                }
+                else
+                  nextNum = String(sequences[displaySeq][i]);
+
+
+                //sets nextnum length value
+                if (topLine.length() == 0)
+                  nextNumLength = nextNum.length();
+                else
+                  nextNumLength = nextNum.length() + 2;
+                
+                if (topLine.length() + nextNumLength <= 16)
+                {
+                  //if it's the first number we don't want to add a space and a comma
+                  if (topLine.length() == 0)
+                    topLine = nextNum;
+                  else
+                    topLine = topLine + ", " + nextNum;
+                }
+                else
+                {
+                  while (topLine.length() < 16)
+                    topLine = topLine + " ";
+                  if (bottomLine.length() == 0)
+                    bottomLine = nextNum;
+                  else
+                    bottomLine = bottomLine + ", " + nextNum;
+                }
+              }
+
+              //filles the rest of the lines with blanks so we don't have characters carrying over from last write
+              while (bottomLine.length() < 16)
+                bottomLine = bottomLine + " ";
+
+
+              
+              /*
+              
+            switch (displaySeq)
+            {
+              
+              case 0:
+                topLine =    "2, 4, 8, 16, 32,";
+                bottomLine = "64, 128         ";
+              break;
+              case 1:
+                topLine =    "3, 5, 7, 9, 11, ";
+                bottomLine = "13, 15          ";
+              break;
+              case 2:
+                topLine =    "2, 3, 4, 5, 6,  ";
+                bottomLine = "7, 8            ";
+              break;
+              case 3:
+                topLine =    "3, 5, 8, 13, 21,";
+                bottomLine = "34, 55          ";
+              break;
+              case 4:
+                topLine =    "2, 3, 5, 7, 11, ";
+                bottomLine = "13, 17          ";
+              break;
+              case 5:
+                topLine =    "3, 6, 10, 15,   ";
+                bottomLine = "21, 28, 36      ";
+              break;
+              case 6:
+                topLine =    "4, 9, 16, 25,   ";
+                bottomLine = "36, 49, 64      ";
+              break;
+              case 7:
+                topLine =    "4, 10, 20, 35,  ";
+                bottomLine = "56, 84, 120     ";
+              break;
+              case 8:
+                topLine =    "5, 14, 30, 55,  ";
+                bottomLine = "91, 140, 204    ";
+              break;
+              case 9:
+                topLine =    "8, 27, 64, 125, ";
+                bottomLine = "216, 343, 512,  ";
+              break;
+              case 10:
+                topLine =    "32|243|1024|3125";
+                bottomLine = "7776|16807|3276 ";
+              break;
+              case 11:
+                topLine =    "13, 37, 73, 121,";
+                bottomLine = "181, 253, 337   ";
+              break;
+            }
+
+            */
     
-          bottomLine = "****************";
-          //Serial.println(x);
-          //bottomLine.setCharAt(x, 'T');
-          bottomLine[x] = 'T';
-          lcd.print(bottomLine);
-      }
+              if (sequence == displaySeq)
+              {
+                if (changeDivision)
+                  if (coarse)
+                    bottomLine[15] = 'C';
+                  else
+                    bottomLine[15] = 'F';
+                else if (changeSequence)
+                  bottomLine[15] = 'S';
+                else
+                  bottomLine[15] = '*';
+              }
+              else
+              {
+                bottomLine[15] = 'o';
+              }
+  
+              lcd.setCursor(0,0);
+              lcd.print(topLine);
+              lcd.setCursor(0,1);
+              lcd.print(bottomLine);
+            }
+
+            //change loop is only for changing the 'o' to a '*'
+            if (change)
+            {
+              lcd.setCursor(15,1);
+              if (changeDivision)
+              {
+                if (coarse)
+                  lcd.print('C');
+                else
+                  lcd.print('F');
+              }
+              else if (changeSequence)
+              {
+                lcd.print('S');
+              }
+              else
+              {
+                lcd.print('*');
+              }
+            }
+  
+            needUpdate = false;
+            change = false;
+        }
   
 }
 
@@ -549,6 +852,77 @@ void sequencer()
           lcd.print(bottomLine);
           //Serial.println(function);
       }
+
+      change = false;
+
+  
+}
+
+
+void clockPulse()
+{
+
+      
+      clockState1 = !clockState1;
+      digitalWrite(led1, clockState1);
+
+      
+      //controls beat light
+      if (counter % sequences[sequence][0] == 0)
+      {
+        
+        clockState2 = !clockState2;
+        digitalWrite(led2, clockState2);
+      }
+      
+      //controls beat light
+      if (counter % sequences[sequence][1] == 0)
+      {
+        
+        clockState3 = !clockState3;
+        digitalWrite(led3, clockState3);
+      }
+      
+      //controls beat light
+      if (counter % sequences[sequence][2] == 0)
+      {
+        
+        clockState4 = !clockState4;
+        digitalWrite(led4, clockState4);
+      }
+      
+      //controls beat light
+      if (counter % sequences[sequence][3] == 0)
+      {
+        
+        clockState5 = !clockState5;
+        digitalWrite(led5, clockState5);
+      }
+      
+      //controls beat light
+      if (counter % sequences[sequence][4] == 0)
+      {
+        
+        clockState6 = !clockState6;
+        digitalWrite(led6, clockState6);
+      }
+      
+      //controls beat light
+      if (counter % sequences[sequence][5] == 0)
+      {
+        
+        clockState7 = !clockState7;
+        digitalWrite(led7, clockState7);
+      }
+      
+      //controls beat light
+      if (counter % sequences[sequence][6] == 0)
+      {
+        
+        clockState8 = !clockState8;
+        digitalWrite(led8, clockState8);
+      }
+
 
   
 }
